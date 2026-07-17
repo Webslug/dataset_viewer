@@ -32,7 +32,7 @@ From the repository root:
 python3 server.py
 ```
 
-Then open [http://127.0.0.1:8000](http://127.0.0.1:8000) in a browser.
+Then open [http://127.0.0.1:8134](http://127.0.0.1:8134) in a browser. The server prints the exact URL at startup, so use that if you choose a different port.
 
 On Windows, use the Python launcher if needed:
 
@@ -78,6 +78,7 @@ Create a project manifest for each client or corpus. A manifest contains the har
 ```json
 {
   "last_project": "default",
+  "port": 8134,
   "theme": "green-grid.css",
   "editor": {
     "command": "featherpad",
@@ -93,6 +94,8 @@ Create a project manifest for each client or corpus. A manifest contains the har
 ```
 
 Available themes are `green-grid.css` and `blue-grid.css`. Refresh the browser after changing configuration.
+
+`port` must be an unused integer from `8000` to `8999`; `8134` is the default. If you change the port, stop the server with `Ctrl+C`, run `python3 server.py` again, and open the newly printed URL.
 
 The default studio arrangement keeps project identity top-left, health top-right, compact canvas icons bottom-left, and project actions bottom-right. You can also use `left-dock` or `top-left` for `canvas_controls`, and `bottom-left` for `project_actions`.
 

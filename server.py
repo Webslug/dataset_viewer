@@ -1,7 +1,7 @@
 """Local server for Dataset Viewer.
 
-Run ``python3 server.py`` and open http://127.0.0.1:8000. Project manifests
-are stored in ``projects/`` and are the allow-list for dataset file access.
+Run ``python3 server.py`` and open the configured local URL it prints. Project
+manifests are stored in ``projects/`` and are the allow-list for dataset access.
 """
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -18,6 +18,7 @@ CONFIG_PATH = PROJECT_DIR / "config.json"
 PROJECTS_DIR = PROJECT_DIR / "projects"
 PROJECT_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$")
 MAX_REQUEST_BYTES = 1_000_000
+DEFAULT_PORT = 8134
 
 
 def read_json(path):
@@ -47,6 +48,14 @@ def safe_project_name(value):
     if not isinstance(value, str) or not PROJECT_NAME.fullmatch(value):
         raise ValueError("Project names may contain letters, numbers, hyphens, and underscores.")
     return value
+
+
+def configured_port(config):
+    """Return the configured local port, constrained to the project range."""
+    port = config.get("port", DEFAULT_PORT)
+    if isinstance(port, bool) or not isinstance(port, int) or not 8000 <= port <= 8999:
+        raise ValueError("config.json port must be an integer from 8000 to 8999.")
+    return port
 
 
 def entry_count(data):
@@ -217,5 +226,6 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    print("Dataset Viewer: http://127.0.0.1:8000")
-    ThreadingHTTPServer(("127.0.0.1", 8000), Handler).serve_forever()
+    port = configured_port(read_json(CONFIG_PATH))
+    print(f"Dataset Viewer: http://127.0.0.1:{port}")
+    ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()

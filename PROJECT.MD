@@ -88,13 +88,15 @@ cd /home/kim/projects/json_data_viewer
 python3 server.py
 ```
 
-Then open [http://127.0.0.1:8000](http://127.0.0.1:8000) in a browser. FeatherPad must be installed and available as `featherpad` for double-click file opening to work.
+Then open [http://127.0.0.1:8134](http://127.0.0.1:8134) in a browser. The server prints the exact URL at startup; use that URL if `config.json` specifies another port. FeatherPad must be installed and available as `featherpad` for double-click file opening to work.
 
 ## Running server note
 
 The **Load project** dialog scans `/home/kim/projects/json_data_viewer/projects` every time it opens. Newly saved or manually added project manifests therefore appear without restarting `server.py`.
 
 When changing `index.html`, CSS, dataset JSON, or project manifests, refresh the browser page. When changing `server.py` itself, stop the existing process with `Ctrl+C` in the terminal that runs it, then start it again with `python3 server.py` so Python loads the updated code.
+
+The local port is configured with the `port` key in `config.json`. It must be an unused integer from `8000` to `8999`; Dataset Viewer defaults to `8134`. Change the value, restart `server.py`, and use the URL printed by the server.
 
 ## GitHub handoff checklist
 
