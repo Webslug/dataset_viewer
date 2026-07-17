@@ -1,0 +1,12 @@
+{
+  "dataset": "test",
+  "purpose": "A small one-entry dataset used to verify project switching in Dataset Viewer.",
+  "examples": [
+    {
+      "messages": [
+        { "role": "user", "content": "Is the test project loaded?" },
+        { "role": "assistant", "content": "Yes. Dataset Viewer has loaded the one-entry test dataset." }
+      ]
+    }
+  ]
+}

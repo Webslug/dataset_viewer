@@ -1,0 +1,14 @@
+{
+  "last_project": "default",
+  "theme": "green-grid.css",
+  "editor": {
+    "command": "featherpad",
+    "arguments": []
+  },
+  "ui_layout": {
+    "identity": "top-left",
+    "health": "top-right",
+    "canvas_controls": "bottom-left",
+    "project_actions": "bottom-right"
+  }
+}

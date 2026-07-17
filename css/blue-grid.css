@@ -1,0 +1,18 @@
+@import url("green-grid.css");
+
+:root {
+  --accent: #5cbeff;
+  --accent-soft: rgba(92, 190, 255, .42);
+  --accent-faint: rgba(92, 190, 255, .1);
+  --glow: rgba(92, 190, 255, .36);
+  --background: #020508;
+  --background-highlight: #103052;
+  --panel: rgba(5, 13, 22, .92);
+  --panel-highlight: #12365a;
+  --node-start: rgba(17, 42, 68, .96);
+  --node-end: rgba(3, 10, 18, .96);
+  --text: #e7f7ff;
+  --text-bright: #cef0ff;
+  --muted: #8ba6b7;
+  --kbd-border: #31658c;
+}

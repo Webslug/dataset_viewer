@@ -1,0 +1,23 @@
+{
+  "name": "test",
+  "metadata": {
+    "client": "Test client",
+    "purpose": "Verify project switching",
+    "target_model": "Test GGUF",
+    "notes": "One-dataset fixture."
+  },
+  "datasets": [
+    {
+      "id": "test",
+      "label": "test.json",
+      "description": "One-entry project switching test",
+      "path": "/home/kim/projects/json_data_viewer/data/test.json"
+    }
+  ],
+  "layout": {
+    "nodes": [
+      { "id": "test", "label": "test.json", "description": "One-entry project switching test", "x": 90, "y": 290 }
+    ],
+    "view": { "zoom": 1, "x": 0, "y": 0, "selectedId": "test" }
+  }
+}

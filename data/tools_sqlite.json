@@ -1,0 +1,21 @@
+{
+  "dataset": "tools_sqlite",
+  "purpose": "Examples for calling an SQLite tool against data.db. Expand this file with validated examples before training.",
+  "database": "data.db",
+  "examples": [
+    {
+      "messages": [
+        { "role": "user", "content": "List all customers." },
+        { "role": "assistant", "content": "I will query the customers table." }
+      ],
+      "tool_call": { "name": "sqlite_query", "arguments": { "database": "data.db", "sql": "SELECT id, name, email FROM customers ORDER BY name;" } }
+    },
+    {
+      "messages": [
+        { "role": "user", "content": "Add Ada Lovelace with email ada@example.com." },
+        { "role": "assistant", "content": "I will add that customer using parameters." }
+      ],
+      "tool_call": { "name": "sqlite_execute", "arguments": { "database": "data.db", "sql": "INSERT INTO customers (name, email) VALUES (?, ?);", "parameters": ["Ada Lovelace", "ada@example.com"] } }
+    }
+  ]
+}

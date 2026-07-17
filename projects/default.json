@@ -1,0 +1,77 @@
+{
+  "name": "default",
+  "metadata": {
+    "client": "Dataset Viewer",
+    "purpose": "Vanilla foundation and tool-use dataset",
+    "target_model": "Private GGUF model",
+    "notes": "Baseline project for new client corpora."
+  },
+  "datasets": [
+    {
+      "id": "root",
+      "label": "root.json",
+      "description": "Model identity and foundation examples",
+      "path": "/home/kim/projects/json_data_viewer/data/root.json"
+    },
+    {
+      "id": "sqlite",
+      "label": "tools_sqlite.json",
+      "description": "SQLite tool-use examples",
+      "path": "/home/kim/projects/json_data_viewer/data/tools_sqlite.json"
+    },
+    {
+      "id": "vision",
+      "label": "tools_vision.json",
+      "description": "Reserved vision tool dataset",
+      "path": "/home/kim/projects/json_data_viewer/data/tools_vision.json"
+    },
+    {
+      "id": "salience",
+      "label": "tools_salience.json",
+      "description": "Reserved salience tool dataset",
+      "path": "/home/kim/projects/json_data_viewer/data/tools_salience.json"
+    }
+  ],
+  "layout": {
+    "nodes": [
+      {
+        "id": "root",
+        "label": "root.json",
+        "description": "Model identity and foundation examples",
+        "visualOnly": false,
+        "x": 90,
+        "y": 290
+      },
+      {
+        "id": "sqlite",
+        "label": "tools_sqlite.json",
+        "description": "SQLite tool-use examples",
+        "visualOnly": false,
+        "x": 380,
+        "y": 290
+      },
+      {
+        "id": "vision",
+        "label": "tools_vision.json",
+        "description": "Reserved vision tool dataset",
+        "visualOnly": false,
+        "x": 670,
+        "y": 290
+      },
+      {
+        "id": "salience",
+        "label": "tools_salience.json",
+        "description": "Reserved salience tool dataset",
+        "visualOnly": false,
+        "x": 960,
+        "y": 240.35386776978925
+      }
+    ],
+    "view": {
+      "zoom": 0.6794756386241962,
+      "x": 233.76677277506735,
+      "y": 86.46367296848744,
+      "selectedId": "salience"
+    }
+  }
+}

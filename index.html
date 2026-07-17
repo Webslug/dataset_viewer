@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dataset Viewer</title>
+  <link rel="stylesheet" id="theme-stylesheet" href="css/green-grid.css">
+  <link rel="stylesheet" href="css/bootstrap/bootstrap-icons.css">
+</head>
+<body>
+  <div id="canvas"><div id="flow"></div></div>
+  <header><h1>Dataset Viewer</h1><span class="badge" id="project-context">Client: loading…</span><span class="badge" id="save-state">Unsaved changes</span></header>
+  <aside id="health" class="badge">Health: checking…</aside>
+  <aside id="canvas-controls" aria-label="Canvas controls"><button id="zoom-out" class="icon-button" data-tooltip="Zoom out (−)" aria-label="Zoom out"><i class="bi bi-zoom-out" aria-hidden="true"></i></button><span class="badge" id="zoom-level" aria-label="Current zoom">100%</span><button id="zoom-in" class="icon-button" data-tooltip="Zoom in (+)" aria-label="Zoom in"><i class="bi bi-zoom-in" aria-hidden="true"></i></button><button id="centre-root" class="icon-button" data-tooltip="Centre view on root.json" aria-label="Centre view on root.json"><i class="bi bi-crosshair" aria-hidden="true"></i></button><button id="add" class="icon-button" data-tooltip="Add visual-only node" aria-label="Add visual-only node"><i class="bi bi-plus-square" aria-hidden="true"></i></button></aside>
+  <nav id="project-actions"><button id="project-details">Project details</button><button id="load-project">Load</button><button id="save-project">Save</button><button id="save-as">Save as…</button><button id="reveal-project">Reveal manifest</button><button id="new-project">New project</button></nav>
+  <dialog id="rename-dialog"><form method="dialog"><label for="name">Dataset label</label><input id="name" required maxlength="80"><div class="dialog-actions"><button value="cancel">Cancel</button><button value="confirm">Save</button></div></form></dialog>
+  <dialog id="load-project-dialog"><section class="project-dialog"><h2>Load project</h2><p>Saved projects in <code>/projects</code>, newest first.</p><input id="project-search" type="search" placeholder="Search client, project, or purpose…"><div id="project-list" class="project-list"></div><form method="dialog" class="dialog-actions"><button>Cancel</button></form></section></dialog>
+  <dialog id="save-project-dialog"><form method="dialog" class="project-dialog" id="save-project-form"><h2>Save project</h2><p>The project file will be saved in <code>/home/kim/projects/json_data_viewer/projects</code>.</p><label for="project-name">Project filename</label><input id="project-name" required maxlength="80" pattern="[A-Za-z0-9][A-Za-z0-9_-]{0,79}"><small>.json is added automatically. Saving an existing name replaces that project.</small><div class="dialog-actions"><button value="cancel">Cancel</button><button value="confirm">Save project</button></div></form></dialog>
+  <dialog id="project-details-dialog"><form method="dialog" class="project-dialog"><h2>Project details</h2><label for="client-name">Client name</label><input id="client-name" maxlength="120"><label for="model-purpose">Model purpose</label><input id="model-purpose" maxlength="180"><label for="target-model">Target GGUF / model name</label><input id="target-model" maxlength="120"><label for="project-notes">Notes</label><textarea id="project-notes" maxlength="1200"></textarea><p id="last-modified"></p><div class="dialog-actions"><button value="cancel">Cancel</button><button value="confirm">Apply changes</button></div></form></dialog>
+  <script>
+    const initial = [
+      { id: 'root', label: 'root.json', file: 'root.json', description: 'Model identity and foundation examples', x: 90, y: 290 },
+      { id: 'sqlite', label: 'tools_sqlite.json', file: 'tools_sqlite.json', description: 'SQLite tool-use examples', x: 380, y: 290 },
+      { id: 'vision', label: 'tools_vision.json', file: 'tools_vision.json', description: 'Reserved vision tool dataset', x: 670, y: 290 },
+      { id: 'salience', label: 'tools_salience.json', file: 'tools_salience.json', description: 'Reserved salience tool dataset', x: 960, y: 290 }
+    ];
+    const canvas = document.querySelector('#canvas'), flow = document.querySelector('#flow'), zoomLevel = document.querySelector('#zoom-level'), projectContext = document.querySelector('#project-context'), health = document.querySelector('#health'), saveState = document.querySelector('#save-state');
+    const layoutKey = 'dataset-viewer-layout';
+    const savedLayout = JSON.parse(localStorage.getItem(layoutKey) || localStorage.getItem('prime-layout') || 'null');
+    // Accept layouts saved by the earlier Prime Dataset Studio version, which stored the node array directly.
+    let nodes = Array.isArray(savedLayout) ? savedLayout : savedLayout?.nodes || initial;
+    let view = Array.isArray(savedLayout) ? { zoom: 1, x: 0, y: 0, selectedId: null } : savedLayout?.view || { zoom: 1, x: 0, y: 0, selectedId: null };
+    let active, offset, pan, renameTarget, currentProjectId = null, currentProjectMeta = {}, currentModified = null, errorCount = 0, dirty = true;
+    function layout() { return { nodes, view }; }
+    function updateDashboard() { const client=currentProjectMeta.client || 'Unassigned client', name=currentProjectId ? `${currentProjectId}.json` : 'unsaved project'; projectContext.textContent=`Client: ${client} · project: ${name}`; const entries=nodes.filter(node => !node.visualOnly).reduce((total,node) => total+(node.entryCount || 0),0); health.textContent=`Health: ${entries} entries · ${errorCount} unavailable · tokens later`; saveState.textContent=dirty ? 'Unsaved changes' : 'All changes saved'; saveState.classList.toggle('dirty', dirty); }
+    function saveLocal() { localStorage.setItem(layoutKey, JSON.stringify(layout())); dirty=true; updateDashboard(); }
+    function screenToWorld(x, y) { return { x: (x - view.x) / view.zoom, y: (y - view.y) / view.zoom }; }
+    function updateViewport() {
+      flow.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.zoom})`;
+      const grid = 28 * view.zoom;
+      canvas.style.backgroundSize = `${grid}px ${grid}px, ${grid}px ${grid}px, auto`;
+      canvas.style.backgroundPosition = `${view.x}px ${view.y}px, ${view.x}px ${view.y}px, center`;
+      zoomLevel.textContent = `${Math.round(view.zoom * 100)}%`;
+    }
+    function draw() {
+      flow.innerHTML = '';
+      nodes.slice(0, -1).forEach((node, i) => { const next = nodes[i + 1], line = document.createElement('div'); line.className = 'link'; const x1=node.x+214, y1=node.y+58, x2=next.x, y2=next.y+58, dx=x2-x1, dy=y2-y1; line.style.cssText += `left:${x1}px;top:${y1}px;width:${Math.hypot(dx,dy)}px;transform:rotate(${Math.atan2(dy,dx)}rad)`; flow.append(line); });
+      nodes.forEach(node => { const el = document.createElement('article'); el.className=`node${node.id === view.selectedId ? ' selected' : ''}`; el.dataset.id=node.id; el.dataset.tooltip=entryTooltip(node); el.title=entryTooltip(node); el.style.left=node.x+'px'; el.style.top=node.y+'px'; el.innerHTML=`<div class="kind">${node.visualOnly ? 'VISUAL NOTE' : 'LINEAR DATASET'}</div><h2>${escapeHtml(node.label)}</h2><p>${escapeHtml(node.description)}</p><div class="node-badges">${node.visualOnly ? '<span>visual only</span>' : `<span>${node.entryCount || 0} entries</span><span title="${escapeHtml(node.file)}">${escapeHtml(shortPath(node.file))}</span>`}</div>`;
+        el.addEventListener('pointerdown', beginDrag); el.addEventListener('dblclick', () => openFile(node)); el.addEventListener('contextmenu', e => rename(e, node)); flow.append(el); });
+      updateViewport();
+      updateDashboard();
+    }
+    function escapeHtml(value) { const div=document.createElement('div'); div.textContent=value; return div.innerHTML; }
+    function shortPath(path) { const parts=String(path).split('/').filter(Boolean); return parts.length > 2 ? `…/${parts.slice(-2).join('/')}` : String(path); }
+    function entryTooltip(node) { if (node.visualOnly) return 'Visual-only node: no JSON file is created'; if (node.entryCount === undefined) return `${node.file}: checking entry count…`; return `${node.file}: ${node.entryCount} dataset ${node.entryCount === 1 ? 'entry' : 'entries'}`; }
+    async function loadProject(projectId = null) {
+      try {
+        const response=await fetch(`/api/project${projectId ? `?name=${encodeURIComponent(projectId)}` : ''}`, { cache: 'no-store' });
+        if (!response.ok) throw new Error('project unavailable');
+        const project=await response.json(), savedById=new Map(nodes.map(node => [node.id, node]));
+        document.querySelector('#theme-stylesheet').href=`css/${project.theme}`; applyUiLayout(project.ui_layout);
+        const layoutNodes=project.layout?.nodes || [], layoutById=new Map(layoutNodes.map(node => [node.id, node]));
+        const projectNodes=project.datasets.map((dataset, index) => { const saved=layoutById.get(dataset.id) || savedById.get(dataset.id); return { ...dataset, label:saved?.label || dataset.label, description:saved?.description || dataset.description, entryCount: dataset.entry_count, x:saved?.x ?? 90+index*290, y:saved?.y ?? 290 }; });
+        const visualNodes=layoutNodes.filter(node => node.visualOnly).map(node => ({ ...node, x:node.x ?? 120, y:node.y ?? 120 }));
+        nodes=[...projectNodes, ...visualNodes];
+        if (project.layout?.view) view={ zoom:1, x:0, y:0, selectedId:null, ...project.layout.view };
+        currentProjectId=project.id; currentProjectMeta={ client:'', purpose:'', target_model:'', notes:'', ...project.metadata }; currentModified=project.modified; errorCount=project.error_count; dirty=false;
+        draw();
+      } catch { projectContext.textContent='Start with python3 server.py to use project files'; }
+    }
+    function applyUiLayout(layout = {}) { const body=document.body; body.dataset.identity=layout.identity || 'top-left'; body.dataset.health=layout.health || 'top-right'; body.dataset.controls=layout.canvas_controls || 'left-dock'; body.dataset.projectActions=layout.project_actions || 'bottom-right'; }
+    function beginDrag(event) { if (event.button !== 0) return; active=nodes.find(n=>n.id===event.currentTarget.dataset.id); const point=screenToWorld(event.clientX,event.clientY); offset={x:point.x-active.x,y:point.y-active.y}; view.selectedId=active.id; event.currentTarget.setPointerCapture(event.pointerId); draw(); }
+    canvas.addEventListener('pointerdown', event => { if (event.button !== 1) return; event.preventDefault(); pan={ pointerId:event.pointerId, startX:event.clientX, startY:event.clientY, x:view.x, y:view.y }; canvas.setPointerCapture(event.pointerId); canvas.classList.add('panning'); });
+    window.addEventListener('pointermove', event => { if (active) { const point=screenToWorld(event.clientX,event.clientY); active.x=Math.max(10,point.x-offset.x); active.y=Math.max(90,point.y-offset.y); draw(); } if (pan && event.pointerId === pan.pointerId) { view.x=pan.x+event.clientX-pan.startX; view.y=pan.y+event.clientY-pan.startY; updateViewport(); } });
+    window.addEventListener('pointerup', event => { if (active) { saveLocal(); active=null; } if (pan && event.pointerId === pan.pointerId) { saveLocal(); pan=null; canvas.classList.remove('panning'); } });
+    function setZoom(nextZoom, anchorX = innerWidth / 2, anchorY = innerHeight / 2) { const point=screenToWorld(anchorX,anchorY); view.zoom=Math.max(.35,Math.min(2.5,nextZoom)); view.x=anchorX-point.x*view.zoom; view.y=anchorY-point.y*view.zoom; updateViewport(); }
+    canvas.addEventListener('wheel', event => { event.preventDefault(); setZoom(view.zoom * (event.deltaY < 0 ? 1.1 : .9), event.clientX, event.clientY); saveLocal(); }, { passive: false });
+    async function openFile(node) { if (node.visualOnly) return; try { const response=await fetch('/api/open',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:node.id})}); if (!response.ok) throw new Error(); } catch { health.textContent='Unable to open this project dataset'; } }
+    function rename(event, node) { event.preventDefault(); renameTarget=node; document.querySelector('#name').value=node.label; document.querySelector('#rename-dialog').showModal(); }
+    document.querySelector('#rename-dialog').addEventListener('close', () => { if (document.querySelector('#rename-dialog').returnValue === 'confirm' && renameTarget) { renameTarget.label=document.querySelector('#name').value.trim(); saveLocal(); draw(); } renameTarget=null; });
+    function centreRoot() { const root=nodes.find(node => node.id === 'root') || nodes[0]; if (!root) return; view.x=innerWidth / 2-(root.x+107)*view.zoom; view.y=innerHeight / 2-(root.y+58)*view.zoom; updateViewport(); saveLocal(); }
+    function projectPayload(name) { return { name, metadata:currentProjectMeta, datasets:nodes.filter(node => !node.visualOnly).map(node => ({ id:node.id, label:node.label, description:node.description, path:node.file })), layout:{ nodes:nodes.map(node => ({ id:node.id, label:node.label, description:node.description, visualOnly:!!node.visualOnly, x:node.x, y:node.y })), view } }; }
+    async function showProjectList() {
+      const dialog=document.querySelector('#load-project-dialog'), list=document.querySelector('#project-list');
+      list.innerHTML='<p>Loading projects…</p>'; dialog.showModal();
+      try {
+        const response=await fetch('/api/projects', { cache:'no-store' }); if (!response.ok) throw new Error();
+        const {projects}=await response.json();
+        list.innerHTML='';
+        if (!projects.length) list.innerHTML='<p>No projects have been saved yet.</p>';
+        const renderProjects=query => { list.innerHTML=''; const matches=projects.filter(project => `${project.id} ${project.name} ${project.metadata?.client || ''} ${project.metadata?.purpose || ''}`.toLowerCase().includes(query.toLowerCase())); if (!matches.length) list.innerHTML='<p>No matching projects.</p>'; matches.forEach(project => { const button=document.createElement('button'), modified=new Date(project.modified*1000).toLocaleString(); button.className='project-choice'; button.innerHTML=`<strong>${escapeHtml(project.metadata?.client || project.name)} <small>${escapeHtml(project.id)}.json</small></strong><span>${escapeHtml(project.metadata?.purpose || 'No purpose recorded')}<br>modified ${escapeHtml(modified)}</span>`; button.ondblclick=button.onclick=async () => { await fetch('/api/select-project',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:project.id})}); dialog.close(); loadProject(project.id); }; list.append(button); }); };
+        const search=document.querySelector('#project-search'); search.value=''; search.oninput=() => renderProjects(search.value); renderProjects(''); search.focus();
+      } catch { list.innerHTML='<p>Start the local server with <code>python3 server.py</code> to browse projects.</p>'; }
+    }
+    function newProject() { nodes=[{ id:'root', label:'root.json', file:'/home/kim/projects/json_data_viewer/root.json', description:'Model identity and foundation examples', entryCount:2, x:90, y:290 }]; view={zoom:1,x:0,y:0,selectedId:'root'}; currentProjectId=null; currentProjectMeta={client:'New client',purpose:'',target_model:'',notes:''}; currentModified=null; errorCount=0; dirty=true; draw(); centreRoot(); }
+    document.querySelector('#new-project').onclick=newProject;
+    document.querySelector('#load-project').onclick=showProjectList;
+    function showSaveDialog(saveAs=false) { document.querySelector('#project-name').value=saveAs ? `${currentProjectId || 'project'}-copy` : currentProjectId || 'default'; document.querySelector('#save-project-dialog').showModal(); }
+    document.querySelector('#save-project').onclick=() => showSaveDialog(); document.querySelector('#save-as').onclick=() => showSaveDialog(true);
+    document.querySelector('#save-project-dialog').addEventListener('close', async () => { const dialog=document.querySelector('#save-project-dialog'); if (dialog.returnValue !== 'confirm') return; const name=document.querySelector('#project-name').value.trim(); try { const response=await fetch('/api/projects',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:name,project:projectPayload(name)})}); if (!response.ok) throw new Error(); await loadProject(name); } catch { health.textContent='Project could not be saved; use python3 server.py'; } });
+    document.querySelector('#project-details').onclick=() => { document.querySelector('#client-name').value=currentProjectMeta.client || ''; document.querySelector('#model-purpose').value=currentProjectMeta.purpose || ''; document.querySelector('#target-model').value=currentProjectMeta.target_model || ''; document.querySelector('#project-notes').value=currentProjectMeta.notes || ''; document.querySelector('#last-modified').textContent=currentModified ? `Last modified: ${new Date(currentModified*1000).toLocaleString()}` : 'Not saved yet'; document.querySelector('#project-details-dialog').showModal(); };
+    document.querySelector('#project-details-dialog').addEventListener('close', () => { const dialog=document.querySelector('#project-details-dialog'); if (dialog.returnValue !== 'confirm') return; currentProjectMeta={client:document.querySelector('#client-name').value.trim(), purpose:document.querySelector('#model-purpose').value.trim(), target_model:document.querySelector('#target-model').value.trim(), notes:document.querySelector('#project-notes').value.trim()}; saveLocal(); });
+    document.querySelector('#reveal-project').onclick=async () => { if (!currentProjectId) { health.textContent='Save this new project before revealing its manifest'; return; } try { const response=await fetch('/api/reveal-project',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:currentProjectId})}); if (!response.ok) throw new Error(); } catch { health.textContent='Unable to reveal the project manifest'; } };
+    document.querySelector('#zoom-in').onclick=() => { setZoom(view.zoom * 1.15); saveLocal(); };
+    document.querySelector('#zoom-out').onclick=() => { setZoom(view.zoom / 1.15); saveLocal(); };
+    document.querySelector('#centre-root').onclick=centreRoot;
+    window.addEventListener('keydown', event => { if (event.target.matches('input, textarea, select')) return; if (event.key === '+' || event.key === '=') { event.preventDefault(); setZoom(view.zoom * 1.15); saveLocal(); } if (event.key === '-') { event.preventDefault(); setZoom(view.zoom / 1.15); saveLocal(); } });
+    document.querySelector('#add').onclick=() => { const number=nodes.filter(node => node.visualOnly).length+1; nodes.push({id:'visual-'+Date.now(),label:`Visual node ${number}`,description:'Visual-only note; no dataset file exists',visualOnly:true,x:120+number*45,y:120+number*35}); saveLocal(); draw(); };
+    draw();
+    loadProject();
+  </script>
+</body>
+</html>
