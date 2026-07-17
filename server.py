@@ -8,13 +8,16 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 import json
+import os
 import re
 import subprocess
+import tempfile
 
 PROJECT_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = PROJECT_DIR / "config.json"
 PROJECTS_DIR = PROJECT_DIR / "projects"
 PROJECT_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$")
+MAX_REQUEST_BYTES = 1_000_000
 
 
 def read_json(path):
@@ -23,7 +26,21 @@ def read_json(path):
 
 
 def write_json(path, payload):
-    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    """Replace JSON atomically so a stopped save does not corrupt a manifest."""
+    descriptor, temporary_path = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as target:
+            json.dump(payload, target, indent=2)
+            target.write("\n")
+            target.flush()
+            os.fsync(target.fileno())
+        os.replace(temporary_path, path)
+    except Exception:
+        try:
+            os.unlink(temporary_path)
+        except FileNotFoundError:
+            pass
+        raise
 
 
 def safe_project_name(value):
@@ -37,6 +54,12 @@ def entry_count(data):
     return len(entries) if isinstance(entries, list) else 0
 
 
+def dataset_path(value):
+    """Resolve absolute paths or project-root-relative paths from a manifest."""
+    path = Path(value).expanduser()
+    return (path if path.is_absolute() else PROJECT_DIR / path).resolve()
+
+
 def load_active_project(project_name=None):
     """Load manifest datasets, silently skipping inaccessible dataset files."""
     config = read_json(CONFIG_PATH)
@@ -46,7 +69,7 @@ def load_active_project(project_name=None):
     datasets = []
     for item in manifest.get("datasets", []):
         try:
-            path = Path(item["path"]).expanduser().resolve()
+            path = dataset_path(item["path"])
             data = read_json(path)
             datasets.append({
                 "id": item["id"],
@@ -92,10 +115,17 @@ def save_project(project_name, payload):
     project_name = safe_project_name(project_name)
     if not isinstance(payload, dict) or not isinstance(payload.get("datasets"), list):
         raise ValueError("A project must contain a dataset list.")
+    project_title = payload.get("name", project_name)
+    if not isinstance(project_title, str) or not project_title.strip() or len(project_title) > 120:
+        raise ValueError("Project name must be non-empty text up to 120 characters.")
     datasets = []
+    dataset_ids = set()
     for item in payload["datasets"]:
         if not isinstance(item, dict) or not all(isinstance(item.get(key), str) for key in ("id", "label", "description", "path")):
             raise ValueError("Each dataset needs an id, label, description, and path.")
+        if not item["id"] or item["id"] in dataset_ids:
+            raise ValueError("Dataset ids must be unique and non-empty.")
+        dataset_ids.add(item["id"])
         datasets.append({key: item[key] for key in ("id", "label", "description", "path")})
     layout = payload.get("layout", {})
     if not isinstance(layout, dict):
@@ -103,7 +133,7 @@ def save_project(project_name, payload):
     metadata = payload.get("metadata", {})
     if not isinstance(metadata, dict) or not all(isinstance(value, str) for value in metadata.values()):
         raise ValueError("Project metadata must contain text values.")
-    manifest = {"name": payload.get("name", project_name), "metadata": metadata, "datasets": datasets, "layout": layout}
+    manifest = {"name": project_title.strip(), "metadata": metadata, "datasets": datasets, "layout": layout}
     write_json(PROJECTS_DIR / f"{project_name}.json", manifest)
     config = read_json(CONFIG_PATH)
     config["last_project"] = project_name
@@ -122,7 +152,12 @@ class Handler(SimpleHTTPRequestHandler):
 
     def request_json(self):
         length = int(self.headers.get("Content-Length", 0))
-        return json.loads(self.rfile.read(length))
+        if not 0 < length <= MAX_REQUEST_BYTES:
+            raise ValueError("Request body must be between 1 and 1,000,000 bytes.")
+        payload = json.loads(self.rfile.read(length))
+        if not isinstance(payload, dict):
+            raise ValueError("Request body must be a JSON object.")
+        return payload
 
     def do_GET(self):
         request = urlparse(self.path)

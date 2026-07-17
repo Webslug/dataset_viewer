@@ -69,7 +69,7 @@ The JSON files in `data/` are deliberately basic templates:
 - `tools_vision.json`
 - `tools_salience.json`
 
-Create a project manifest for each client or corpus. A manifest contains the hard-coded paths to its datasets, metadata, and saved canvas layout. Dataset paths can point to other drives; if you clone this repository onto another machine, amend those absolute paths.
+Create a project manifest for each client or corpus. A manifest contains the hard-coded paths to its datasets, metadata, and saved canvas layout. Dataset paths can point to other drives as absolute paths, or use project-root-relative paths such as `data/root.json`. If you clone this repository onto another machine, amend any absolute paths.
 
 ## Configure the interface
 
@@ -124,7 +124,6 @@ The editor command must be installed and available on your system `PATH`.
 
 ## Current limitations
 
-- The FeatherPad/double-click editor flow is a known regression and needs repair/testing.
 - Existing project names are overwritten when saved; there is no version history or backup prompt yet.
 - Dataset files are parsed for entry counts, but their training-record schema is not deeply validated yet.
 - Unreadable or invalid dataset files are skipped so the rest of a project can load; the health strip reports the count.

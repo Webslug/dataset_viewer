@@ -58,13 +58,13 @@ The `ui_layout` object in `config.json` controls the placement of the interface 
 
 Every dataset should have one explicit purpose and a consistent response/tool-call pattern before it is expanded substantially.
 
-## Known issue
+## Editor opening flow
 
-- **Double-click to open in FeatherPad is currently broken.** The node interaction is still present in the interface, but the editor does not open reliably. Treat this as the next functional bug to diagnose before relying on Dataset Viewer for editing. The expected path is: double-click a manifest-declared dataset node → local server validates its dataset id → configured editor command opens the declared path.
+Double-clicking a manifest-declared dataset node opens its declared path through the editor configured in `config.json`. The browser keeps the clicked node intact through selection so the double-click event reaches the local server; the server then validates the dataset id against the active manifest before it invokes the configured editor command.
 
 ## Concerns and deliberate limits
 
-- Project manifests currently use absolute dataset paths. This is useful for multiple drives, but a project copied to another machine will need its paths updated.
+- Project manifests can use absolute dataset paths for multiple drives or project-root-relative paths such as `data/root.json`. A project copied to another machine will still need any absolute paths updated.
 - Saving to an existing project name replaces that manifest. There is no overwrite confirmation, backup, undo, or version history yet.
 - Dataset files are counted and parsed, but their training-record structure is not deeply validated. A valid JSON file can still contain unsuitable training data.
 - Unreadable files are intentionally skipped so that the remaining corpus stays usable. The health strip reports the count, but it does not yet identify the individual failed paths in the interface.
@@ -73,12 +73,11 @@ Every dataset should have one explicit purpose and a consistent response/tool-ca
 
 ## Most useful next milestones
 
-1. Repair and test the FeatherPad double-click flow.
-2. Add a project-safe dataset attachment workflow that creates or selects real JSON files, replacing the temporary visual-only-node limitation when ready.
-3. Add per-file validation feedback: invalid JSON, duplicate dataset ids, missing paths, schema/record-shape warnings, and a visible failed-file list.
-4. Estimate corpus size and token count, then surface it in the existing health strip.
-5. Add safe saving: overwrite confirmation, automatic timestamped backups, and/or manifest revision history.
-6. Add a small test suite for manifest loading, saving, path failures, editor command construction, and UI project switching.
+1. Add a project-safe dataset attachment workflow that creates or selects real JSON files, replacing the temporary visual-only-node limitation when ready.
+2. Add per-file validation feedback: invalid JSON, duplicate dataset ids, missing paths, schema/record-shape warnings, and a visible failed-file list.
+3. Estimate corpus size and token count, then surface it in the existing health strip.
+4. Add safe saving: overwrite confirmation, automatic timestamped backups, and/or manifest revision history.
+5. Add a small test suite for manifest loading, saving, path failures, editor command construction, and UI project switching.
 
 ## Start the project
 
@@ -101,4 +100,4 @@ When changing `index.html`, CSS, dataset JSON, or project manifests, refresh the
 
 - Do not commit private client datasets, absolute paths that reveal sensitive storage locations, or generated `__pycache__/` files.
 - Keep `projects/test.json` and `test.json` as a small public switching fixture.
-- Before publishing, confirm the default project loads, the test project loads one node, save/load preserves the canvas state, and the known FeatherPad regression is clearly documented or repaired.
+- Before publishing, confirm the default project loads, the test project loads one node, save/load preserves the canvas state, and a double-click opens a manifest-declared dataset in the configured editor.

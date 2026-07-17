@@ -19,10 +19,10 @@
   <dialog id="project-details-dialog"><form method="dialog" class="project-dialog"><h2>Project details</h2><label for="client-name">Client name</label><input id="client-name" maxlength="120"><label for="model-purpose">Model purpose</label><input id="model-purpose" maxlength="180"><label for="target-model">Target GGUF / model name</label><input id="target-model" maxlength="120"><label for="project-notes">Notes</label><textarea id="project-notes" maxlength="1200"></textarea><p id="last-modified"></p><div class="dialog-actions"><button value="cancel">Cancel</button><button value="confirm">Apply changes</button></div></form></dialog>
   <script>
     const initial = [
-      { id: 'root', label: 'root.json', file: 'root.json', description: 'Model identity and foundation examples', x: 90, y: 290 },
-      { id: 'sqlite', label: 'tools_sqlite.json', file: 'tools_sqlite.json', description: 'SQLite tool-use examples', x: 380, y: 290 },
-      { id: 'vision', label: 'tools_vision.json', file: 'tools_vision.json', description: 'Reserved vision tool dataset', x: 670, y: 290 },
-      { id: 'salience', label: 'tools_salience.json', file: 'tools_salience.json', description: 'Reserved salience tool dataset', x: 960, y: 290 }
+      { id: 'root', label: 'root.json', file: 'data/root.json', description: 'Model identity and foundation examples', x: 90, y: 290 },
+      { id: 'sqlite', label: 'tools_sqlite.json', file: 'data/tools_sqlite.json', description: 'SQLite tool-use examples', x: 380, y: 290 },
+      { id: 'vision', label: 'tools_vision.json', file: 'data/tools_vision.json', description: 'Reserved vision tool dataset', x: 670, y: 290 },
+      { id: 'salience', label: 'tools_salience.json', file: 'data/tools_salience.json', description: 'Reserved salience tool dataset', x: 960, y: 290 }
     ];
     const canvas = document.querySelector('#canvas'), flow = document.querySelector('#flow'), zoomLevel = document.querySelector('#zoom-level'), projectContext = document.querySelector('#project-context'), health = document.querySelector('#health'), saveState = document.querySelector('#save-state');
     const layoutKey = 'dataset-viewer-layout';
@@ -30,7 +30,7 @@
     // Accept layouts saved by the earlier Prime Dataset Studio version, which stored the node array directly.
     let nodes = Array.isArray(savedLayout) ? savedLayout : savedLayout?.nodes || initial;
     let view = Array.isArray(savedLayout) ? { zoom: 1, x: 0, y: 0, selectedId: null } : savedLayout?.view || { zoom: 1, x: 0, y: 0, selectedId: null };
-    let active, offset, pan, renameTarget, currentProjectId = null, currentProjectMeta = {}, currentModified = null, errorCount = 0, dirty = true;
+    let active, offset, pan, renameTarget, currentProjectId = null, currentProjectMeta = {}, currentModified = null, errorCount = 0, dirty = true, renderQueued = false;
     function layout() { return { nodes, view }; }
     function updateDashboard() { const client=currentProjectMeta.client || 'Unassigned client', name=currentProjectId ? `${currentProjectId}.json` : 'unsaved project'; projectContext.textContent=`Client: ${client} · project: ${name}`; const entries=nodes.filter(node => !node.visualOnly).reduce((total,node) => total+(node.entryCount || 0),0); health.textContent=`Health: ${entries} entries · ${errorCount} unavailable · tokens later`; saveState.textContent=dirty ? 'Unsaved changes' : 'All changes saved'; saveState.classList.toggle('dirty', dirty); }
     function saveLocal() { localStorage.setItem(layoutKey, JSON.stringify(layout())); dirty=true; updateDashboard(); }
@@ -50,6 +50,7 @@
       updateViewport();
       updateDashboard();
     }
+    function requestDraw() { if (renderQueued) return; renderQueued=true; requestAnimationFrame(() => { renderQueued=false; draw(); }); }
     function escapeHtml(value) { const div=document.createElement('div'); div.textContent=value; return div.innerHTML; }
     function shortPath(path) { const parts=String(path).split('/').filter(Boolean); return parts.length > 2 ? `…/${parts.slice(-2).join('/')}` : String(path); }
     function entryTooltip(node) { if (node.visualOnly) return 'Visual-only node: no JSON file is created'; if (node.entryCount === undefined) return `${node.file}: checking entry count…`; return `${node.file}: ${node.entryCount} dataset ${node.entryCount === 1 ? 'entry' : 'entries'}`; }
@@ -69,9 +70,9 @@
       } catch { projectContext.textContent='Start with python3 server.py to use project files'; }
     }
     function applyUiLayout(layout = {}) { const body=document.body; body.dataset.identity=layout.identity || 'top-left'; body.dataset.health=layout.health || 'top-right'; body.dataset.controls=layout.canvas_controls || 'left-dock'; body.dataset.projectActions=layout.project_actions || 'bottom-right'; }
-    function beginDrag(event) { if (event.button !== 0) return; active=nodes.find(n=>n.id===event.currentTarget.dataset.id); const point=screenToWorld(event.clientX,event.clientY); offset={x:point.x-active.x,y:point.y-active.y}; view.selectedId=active.id; event.currentTarget.setPointerCapture(event.pointerId); draw(); }
+    function beginDrag(event) { if (event.button !== 0) return; active=nodes.find(n=>n.id===event.currentTarget.dataset.id); const point=screenToWorld(event.clientX,event.clientY); offset={x:point.x-active.x,y:point.y-active.y}; view.selectedId=active.id; document.querySelectorAll('.node').forEach(element => element.classList.toggle('selected', element.dataset.id === active.id)); event.currentTarget.setPointerCapture(event.pointerId); }
     canvas.addEventListener('pointerdown', event => { if (event.button !== 1) return; event.preventDefault(); pan={ pointerId:event.pointerId, startX:event.clientX, startY:event.clientY, x:view.x, y:view.y }; canvas.setPointerCapture(event.pointerId); canvas.classList.add('panning'); });
-    window.addEventListener('pointermove', event => { if (active) { const point=screenToWorld(event.clientX,event.clientY); active.x=Math.max(10,point.x-offset.x); active.y=Math.max(90,point.y-offset.y); draw(); } if (pan && event.pointerId === pan.pointerId) { view.x=pan.x+event.clientX-pan.startX; view.y=pan.y+event.clientY-pan.startY; updateViewport(); } });
+    window.addEventListener('pointermove', event => { if (active) { const point=screenToWorld(event.clientX,event.clientY); active.x=Math.max(10,point.x-offset.x); active.y=Math.max(90,point.y-offset.y); requestDraw(); } if (pan && event.pointerId === pan.pointerId) { view.x=pan.x+event.clientX-pan.startX; view.y=pan.y+event.clientY-pan.startY; updateViewport(); } });
     window.addEventListener('pointerup', event => { if (active) { saveLocal(); active=null; } if (pan && event.pointerId === pan.pointerId) { saveLocal(); pan=null; canvas.classList.remove('panning'); } });
     function setZoom(nextZoom, anchorX = innerWidth / 2, anchorY = innerHeight / 2) { const point=screenToWorld(anchorX,anchorY); view.zoom=Math.max(.35,Math.min(2.5,nextZoom)); view.x=anchorX-point.x*view.zoom; view.y=anchorY-point.y*view.zoom; updateViewport(); }
     canvas.addEventListener('wheel', event => { event.preventDefault(); setZoom(view.zoom * (event.deltaY < 0 ? 1.1 : .9), event.clientX, event.clientY); saveLocal(); }, { passive: false });
@@ -92,7 +93,7 @@
         const search=document.querySelector('#project-search'); search.value=''; search.oninput=() => renderProjects(search.value); renderProjects(''); search.focus();
       } catch { list.innerHTML='<p>Start the local server with <code>python3 server.py</code> to browse projects.</p>'; }
     }
-    function newProject() { nodes=[{ id:'root', label:'root.json', file:'/home/kim/projects/json_data_viewer/root.json', description:'Model identity and foundation examples', entryCount:2, x:90, y:290 }]; view={zoom:1,x:0,y:0,selectedId:'root'}; currentProjectId=null; currentProjectMeta={client:'New client',purpose:'',target_model:'',notes:''}; currentModified=null; errorCount=0; dirty=true; draw(); centreRoot(); }
+    function newProject() { nodes=[{ id:'root', label:'root.json', file:'data/root.json', description:'Model identity and foundation examples', entryCount:2, x:90, y:290 }]; view={zoom:1,x:0,y:0,selectedId:'root'}; currentProjectId=null; currentProjectMeta={client:'New client',purpose:'',target_model:'',notes:''}; currentModified=null; errorCount=0; dirty=true; draw(); centreRoot(); }
     document.querySelector('#new-project').onclick=newProject;
     document.querySelector('#load-project').onclick=showProjectList;
     function showSaveDialog(saveAs=false) { document.querySelector('#project-name').value=saveAs ? `${currentProjectId || 'project'}-copy` : currentProjectId || 'default'; document.querySelector('#save-project-dialog').showModal(); }
